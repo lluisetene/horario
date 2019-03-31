@@ -1,1 +1,1 @@
-# horario
+Proyecto en fase beta.
