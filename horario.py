@@ -5,71 +5,87 @@ Created on 28 mar. 2019
 '''
 from pathlib import Path
 from datetime import datetime
-import sys
 
 
 class Horario:
 
     def __init__(self):
-        self.rutaDb, self.rutaHistorial = self.rutas('empresa')
-        self.fechaHoraEstado = {}  # {fecha:hoy, hora:inicio_jornada, Estado:Nada}
+        self.rutaDb, self.rutaHistorial = self.rutas('casa')
+        self.fechaHoraEstadoProyectos = {}  # {fecha:hoy, hora:inicio_jornada, Estado:Nada}
         self.jornada = {}  # {Proyecto: {subProyecto: listaConHoras}}
         self.lista_acciones = ['Proyectos', 'Salida', 'Descanso']
-        self.lista_proyectos = ['H3O', 'Ordoñez', 'LCADB', 'Infor_Genral'] #temporal
         self.estadoActual = 'Nada'
 
     # Generar los campos necesarios para poder almacenar datos
     def preparar_campos(self):
-        if Path(self.rutaDb).is_file():
-            historial = None
-            mensaje = None
-        else:
-            self.generar_contenido_fichero_db('Creado fichero "db.txt" correctamente')
-
-        self.fechaHoraEstado, self.jornada = self.cargar_diccionarios(self.rutaDb)
+        if not Path(self.rutaDb).is_file():
+            self.generar_contenido_fichero_db('Creado fichero "db.txt" correctamente', ficherosCreados=False)
+            
+        historial = None
+        mensaje = None
+        self.fechaHoraEstadoProyectos, self.jornada = self.cargar_diccionarios(self.rutaDb)
 
         # si es jornada nueva, resetear datos db
-        if self.fechaHoraEstado['Fecha'] != self.fecha_actual():
-            self.generar_contenido_fichero_db("Creada nueva jornada laboral")
+        if self.fechaHoraEstadoProyectos['Fecha'] != self.getFechaActual():
+            self.generar_contenido_fichero_db("Creada nueva jornada laboral", ficherosCreados=True)
         else:
             # el usuario elige que acción realizar: iniciar proyecto, descansar, ...
             accion = self.mostrar_opciones(self.lista_acciones)
             if accion[0].lower() == 'p':  # proyectos disponibles
-                proyecto = self.mostrar_opciones(self.lista_proyectos)
-                if self.fechaHoraEstado['Estado'] != 'Nada':
-                    proyectoAnterior = self.fechaHoraEstado['Estado']
-                    self.jornada[proyectoAnterior].append(self.hora_actual())
-                self.jornada[proyecto].append(self.hora_actual())
-                self.fechaHoraEstado['Estado'] = proyecto
+                proyecto = self.mostrar_opciones(self.getProyectos().split(' '))
+                if self.getEstado() != 'Nada':
+                    proyectoAnterior = self.getEstado()
+                    self.jornada[proyectoAnterior].append(self.getHoraActual())
+                self.jornada[proyecto].append(self.getHoraActual())
+                self.setEstado(proyecto)
             elif accion[0].lower() == 'd':  # descanso
-                proyectoAnterior = self.fechaHoraEstado['Estado']
-                self.jornada[proyectoAnterior].append(self.hora_actual())
+                proyectoAnterior = self.getEstado()
+                self.jornada[proyectoAnterior].append(self.getHoraActual())
                 if accion not in self.jornada:
                     self.jornada[accion] = []
-                self.jornada[accion].append(self.hora_actual())
-                self.fechaHoraEstado['Estado'] = accion
+                self.jornada[accion].append(self.getHoraActual())
+                self.setEstado(accion)
             elif accion[0].lower() == 's':  # salida
-                if self.fechaHoraEstado['Estado'] != 'Nada':
-                    ultimaTarea = self.fechaHoraEstado['Estado']
-                    self.jornada[ultimaTarea].append(self.hora_actual())
-                    self.fechaHoraEstado['Estado'] = 'Nada'
-                historial = self.escribir_en_fichero_historial(self.fechaHoraEstado, self.jornada)
+                if self.getEstado() != 'Nada':
+                    ultimaTarea = self.getEstado()
+                    self.jornada[ultimaTarea].append(self.getHoraActual())
+                    self.setEstado('Nada')
+                historial = self.escribir_en_fichero_historial(self.fechaHoraEstadoProyectos, self.jornada)
                 mensaje = 'Generado historial del día de hoy'
 
-            datos = self.rellenar_variable_datos(self.fechaHoraEstado, self.jornada)
+            datos = self.rellenar_variable_datos(self.fechaHoraEstadoProyectos, self.jornada)
             self.escribir_ficheros(datos=datos, historial=historial, mensaje=mensaje)
 
 
     ####  Funciones  ####
+    def setProyectos(self, ficherosCreados=True):
+        lista_proyectos = list()
+        if ficherosCreados:
+            print('Lista de proyectos de ayer: ', self.getProyectos())
+            print('¿Sigues con estos proyectos(Sí) o quieres actualizar la lista(No)?')
+            respuesta = self.mostrar_opciones(['Sí', 'No'])
+            if respuesta == 'Sí':
+                return self.getProyectos()
+        else:
+            print('Creando fichero "db.txt" en el directorio {0}...'.format(self.rutaDb))
+            print('Primero de todo, debes especificar los proyectos con los que vas a trabajar hoy...')
+        while True:
+            proyecto = input('Inserta el nombre del proyecto (vacío para terminar): ')
+            if proyecto == '':
+                break
+            lista_proyectos.append(proyecto)
+        lista_proyectos.append('Inf_General')
+        return ' '.join(lista_proyectos)
+
     def cargar_diccionarios(self, rutaDb):
-        fecha_hora_estado_tmp = {}
+        fecha_hora_estado_proyectos_tmp = {}
         jornada_tmp = {}
         fichero = open(rutaDb, 'r')
         # leo la primera linea
         primeraLinea = fichero.readline()
         for contenido in primeraLinea.split(';'):
             clave, valor = contenido.split('-')
-            fecha_hora_estado_tmp[clave] = valor.strip()
+            fecha_hora_estado_proyectos_tmp[clave] = valor.strip()
 
         for linea in fichero.readlines():
             proyecto, lista_horas = linea.split('>')
@@ -78,21 +94,22 @@ class Horario:
             for hora in horas.split(' '):
                 if hora != '':
                     jornada_tmp[proyecto].append(hora.rstrip())
-        return fecha_hora_estado_tmp, jornada_tmp
+        return fecha_hora_estado_proyectos_tmp, jornada_tmp
 
-    def generar_contenido_fichero_db(self, mensaje):
-        datos = self.linea_inicio(self.fecha_actual(), self.hora_actual(), self.estadoActual)
-        for proyecto in self.lista_proyectos:
+    def generar_contenido_fichero_db(self, mensaje, ficherosCreados):
+        self.setProyectos(self.setProyectos(ficherosCreados))
+        datos = self.linea_inicio(self.getFechaActual(), self.getHoraActual(), self.estadoActual, self.getProyectos())
+        for proyecto in self.getProyectos().split(' '):
             datos += '{0}>\n'.format(proyecto)
         self.escribir_ficheros(datos=datos, mensaje=mensaje)
 
-    def linea_inicio(self, fecha, hora, estado):
-        return 'Fecha-{0};Hora-{1};Estado-{2}\n'.format(fecha, hora, estado)
+    def linea_inicio(self, fecha, hora, estado, proyectos):
+        return 'Fecha-{0};Hora-{1};Estado-{2};Proyectos-{3}\n'.format(fecha, hora, estado, proyectos)
 
     def rellenar_variable_datos(self, fechaHoraEstado, jornada, lineaInicio=True):
         datos = ''
         if lineaInicio:
-            datos = self.linea_inicio(fechaHoraEstado['Fecha'], fechaHoraEstado['Hora'], fechaHoraEstado['Estado'])
+            datos = self.linea_inicio(fechaHoraEstado['Fecha'], fechaHoraEstado['Hora'], fechaHoraEstado['Estado'], fechaHoraEstado['Proyectos'])
         for proyecto in jornada:
             datos += '{0}>{1}\n'.format(proyecto, ' '.join(jornada[proyecto]))
         return datos
@@ -109,7 +126,7 @@ class Horario:
 
             if opcion_elegida not in dicc_tmp:
                 print('Elección incorrecta')
-            elif opcion_elegida == 'd' and self.fechaHoraEstado['Estado'] == 'Nada':
+            elif opcion_elegida == 'd' and self.getEstado() == 'Nada':
                 print("Acción no permitida")
             else:
                 break
@@ -123,7 +140,7 @@ class Horario:
             db = open(self.rutaHistorial, 'a')
             db.write(historial)
         db.close()
-        print(mensaje) if mensaje is not None else ''
+        if mensaje is not None: print(mensaje)
 
     def rutas(self, lugar):
         if lugar == 'empresa':
@@ -138,7 +155,7 @@ class Horario:
         historial = '\n\n--------------------------------------\n'
         historial += 'Resumen jornada de hoy, {0}\n\n'.format(fechaHoraEstado['Fecha'])
         historial += 'Inicio de jornada > {0}\n'.format(fechaHoraEstado['Hora'])
-        historial += 'Fin de jornada > {0}\n\n'.format(self.hora_actual())
+        historial += 'Fin de jornada > {0}\n\n'.format(self.getHoraActual())
         historial += 'Tiempos de cada proyecto:\n'
         historial += self.rellenar_variable_datos(fechaHoraEstado, jornada, lineaInicio=False)
         historial += '\n'
@@ -150,14 +167,14 @@ class Horario:
 
     def operar_horas_lista(self, lista):
         if len(lista) == 2:
-            return [self.sumar_horas(lista[i - 1], lista[i]) for i in range(1, len(lista), 2)][0]
+            return [self.restar_horas(lista[i - 1], lista[i]) for i in range(1, len(lista), 2)][0]
         else:
             lista = [self.restar_horas(lista[i - 1], lista[i]) for i in range(1, len(lista), 2)]
             while len(lista) > 2:
                 lista_tmp = [self.sumar_horas(lista[i - 1], lista[i]) for i in range(1, len(lista), 2)]
                 if len(lista_tmp) % 2 != 0:
                     lista_tmp.append(lista[len(lista) - 1])
-                    lista = lista_tmp
+                lista = lista_tmp    
             return [self.sumar_horas(lista[i - 1], lista[i]) for i in range(1, len(lista), 2)][0]
 
     def restar_horas(self, hora1, hora2):
@@ -179,10 +196,19 @@ class Horario:
                 tiempos[i] = '0' + str(tiempos[i])
         return '{0}:{1}:{2}'.format(tiempos[0], tiempos[1], tiempos[2])
 
-    def hora_actual(self):
+    def getProyectos(self):
+        return self.fechaHoraEstadoProyectos['Proyectos']
+    
+    def setEstado(self, estado):
+        self.fechaHoraEstadoProyectos['Estado'] = estado
+        
+    def getEstado(self):
+        return self.fechaHoraEstadoProyectos['Estado']
+
+    def getHoraActual(self):
         return datetime.now().strftime("%H:%M:%S")
 
-    def fecha_actual(self):
+    def getFechaActual(self):
         return datetime.now().strftime("%Y/%m/%d")
 
 horario = Horario()
