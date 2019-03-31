@@ -1,7 +1,7 @@
 '''
 Created on 28 mar. 2019
 
-@author: WEB2
+@author: lluis
 '''
 from pathlib import Path
 from datetime import datetime
