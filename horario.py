@@ -58,7 +58,7 @@ class Horario:
 
 
     ####  Funciones  ####
-    def setProyectos(self, ficherosCreados=True):
+    def crear_lista_proyectos(self, ficherosCreados=True):
         lista_proyectos = list()
         if ficherosCreados:
             print('Lista de proyectos de ayer: ', self.getProyectos())
@@ -97,7 +97,7 @@ class Horario:
         return fecha_hora_estado_proyectos_tmp, jornada_tmp
 
     def generar_contenido_fichero_db(self, mensaje, ficherosCreados):
-        self.setProyectos(self.setProyectos(ficherosCreados))
+        self.setProyectos(self.crear_lista_proyectos(ficherosCreados))
         datos = self.linea_inicio(self.getFechaActual(), self.getHoraActual(), self.estadoActual, self.getProyectos())
         for proyecto in self.getProyectos().split(' '):
             datos += '{0}>\n'.format(proyecto)
@@ -196,6 +196,9 @@ class Horario:
                 tiempos[i] = '0' + str(tiempos[i])
         return '{0}:{1}:{2}'.format(tiempos[0], tiempos[1], tiempos[2])
 
+    def setProyectos(self, proyectos):
+        self.fechaHoraEstadoProyectos['Proyectos'] = proyectos
+        
     def getProyectos(self):
         return self.fechaHoraEstadoProyectos['Proyectos']
     
