@@ -19,43 +19,65 @@ from email.encoders import encode_base64
 from email import encoders
 import zipfile
 import re
+import configparser
 
 
-class HorarioV2:
+class Horario:
     
-    def __init__(self, folder_path, history_file_path, my_mail, passwd=None, show_options=None):
+    def __init__(self, folder_path, history_file_path, my_mail, passwd=None):
         self.folder_path = folder_path
         self.history_file_path = history_file_path
         self.home_path = folder_path[:14]
         self.file_name = '{0}.txt'.format(self.get_date())
         self.my_mail = my_mail
         self.passwd = passwd
-        self.show_options = show_options
-        self.options_list = ['Periodo de fechas', 'Proyecto', 'Tarea', 'Salir']
 
-        
-    
+
     def working_day(self):
-        self.__mkdir(self.folder_path)
-        if self.show_options is None:
-            self.__write_file(self.home_path, self.folder_path, self.file_name, self.history_file_path)
-        else:
-            self.__show_options()
-    
-    
-    def __mkdir(self, folder_path):
         if not os.path.exists(folder_path):
-            try:
-                os.mkdir(folder_path)
-            except:
-                print('The folder could not be created')
-            else:
-                print('New folder: {0}'.format(folder_path))
+            self.__mkdir(self.folder_path)
+        config_path = folder_path + '\\config.ini'
+        if not Path(config_path).is_file():
+            self.__nano_config(config_path)
+        self.__write_file(self.home_path, self.folder_path, self.file_name, self.history_file_path)
+
+
+    def extra_commands(self, command):
+        if command == '-c': #cambiar correo y contraseña (cifrada)
+            print('desarrollo')
+        elif command == '-h': #mostrar comandos disponibles
+            print('desarrollo')
+        elif command == '-r': #refactorizar history.py
+            print('desarrollo')
         else:
-            pass
+            print('Command not found. For more info "horario.py -h"')
+
+
+    def __mkdir(self, folder_path):
+        try:
+            os.mkdir(folder_path)
+        except:
+            print('The folder could not be created')
+        else:
+            print('New folder: {0}'.format(folder_path))
         return folder_path
-            
-            
+
+
+    def __nano_config(self, config_path):
+        #config_file = codecs.open(config_path, 'w', 'utf8')
+        email = input('Email: ')
+        password = getpass.getpass('Password: ')
+
+        config = configparser.ConfigParser()
+        config.add_section('USER')
+        config.set('USER', 'name', '')
+        config.set('USER', 'email', email)
+        config.set('USER', 'password', password)
+
+        with open(config_path, 'w') as f:
+            config.write(f)
+
+
     def __write_file(self, home_path, folder_path, file_name, history_file_path):
         workday_path = '{0}\\{1}'.format(folder_path, file_name)
         save_history = False
@@ -104,14 +126,14 @@ class HorarioV2:
                 if len(line) > 1:
                     hours, task = line.split('=>')
                     task = task.strip().lower()
-                    proyect = re.match('\[([^]]+)\]', task).group()
+                    #proyect = re.match('\[([^]]+)\]', task).group()
                     start_hour_task, end_hour_task = hours.split('-')
                     if task not in d_workday:
                         d_workday.update({task: [start_hour_task, end_hour_task]})
                     else:
                         d_workday.get(task).extend([start_hour_task, end_hour_task])
-                    if task.find(proyect) >= 0:
-                        d_proyects.update({proyect: [start_hour_task, end_hour_task]})
+                    #if task.find(proyect) >= 0:
+                    #    d_proyects.update({proyect: [start_hour_task, end_hour_task]})
         file.close()
         
         '''
@@ -120,7 +142,7 @@ class HorarioV2:
         '''
         time_list = []
         for k in d_workday:
-            if k == 'comer' or k == 'almuerzo':
+            if k == 'break':
                 time_list.extend(d_workday[k])
         if len(time_list) > 0:
             workday_time = self.__operate_hours_list(time_list)
@@ -128,7 +150,7 @@ class HorarioV2:
         
         historical = '\n\n--------------------------------------\n'
         historical += 'Resumen jornada de hoy, {0}\n\n'.format(date_workday)
-        historical += 'Inicio de jornada > {0}'.format(start_hour_workday)
+        historical += 'Inicio de jornada > {0}\n'.format(start_hour_workday)
         historical += 'Fin de jornada > {0}\n'.format(end_hour_workday)
         historical += 'Duración de la jornada: {0}\n\n'.format(self.__subtract_hours(start_hour_workday, end_hour_workday))
         historical += 'Intervalos de tiempo para cada tarea:\n'
@@ -195,7 +217,8 @@ class HorarioV2:
             if times[i] < 10:
                 times[i] = '0' + str(times[i])
         return '{0}:{1}:{2}'.format(times[0], times[1], times[2])
-        
+
+
     def __send_mail(self):
         zip_name, backup_zip, start_of_workweek, end_of_workweek = self.__files_compress()
 
@@ -248,7 +271,8 @@ class HorarioV2:
         server.close()
          
         print('Correo enviado a {0} satisfactoriamente'.format(self.my_mail))
-        
+
+
     def __files_compress(self):
         end_of_workday = datetime.now()
         start_of_workday = end_of_workday - timedelta(days=4)
@@ -260,78 +284,28 @@ class HorarioV2:
         zip_name = self.folder_path + '\\backup_{0}_{1}.zip'.format(start_of_workweek,
                                                                             end_of_workweek)
         backup_zip = zipfile.ZipFile(zip_name, 'w')
-        for folder, subfolders, files in os.walk(self.folder_path):
-            for file in files:
-                if int(file.split('-')[2].split('.')[0]) in list_of_days:
-                    backup_zip.write(os.path.join(folder, file),
-                                     file,
-                                     compress_type=zipfile.ZIP_DEFLATED)
-                    
-#           file = 'history.txt'
-#         os.chdir(self.home_path)
-#         with zipfile.ZipFile(zip_name, 'a') as myzip:
-#             myzip.write(os.path.join(file),
-#                          file,
-#                          compress_type=zipfile.ZIP_DEFLATED)
-#         backup_zip.write()
-#         backup_zip.setpassword(self.passwd_zip)
+#         for folder, subfolders, files in os.walk(self.folder_path):
+#             for file in files:
+#                 if int(file.split('-')[2].split('.')[0]) in list_of_days:
+#                     backup_zip.write(os.path.join(folder, file),
+#                                      file,
+#                                      compress_type=zipfile.ZIP_DEFLATED)
+#
+# #           file = 'history.txt'
+# #         os.chdir(self.home_path)
+# #         with zipfile.ZipFile(zip_name, 'a') as myzip:
+# #             myzip.write(os.path.join(file),
+# #                          file,
+# #                          compress_type=zipfile.ZIP_DEFLATED)
+# #         backup_zip.write()
+# #         backup_zip.setpassword(self.passwd_zip)
         backup_zip.close()
         return zip_name, backup_zip, start_of_workweek, end_of_workweek
-    
-    def __show_options(self):
-        for i, opt in enumerate(self.options_list):
-            print('{0}) {1}'.format(i, opt))
-        try:
-            opt_select = int(input('Introduce el número de la opción: '))
-        except:
-            print('Opción incorrecta')
-            return self.__show_options()
-        
-        if opt_select < 0 or opt_select >= len(self.options_list):    
-            print('Opción incorrecta')
-            return self.__show_options()
-        
-        else:
-            if opt_select is 3: #Salir
-                print('Adios!')
-                sys.exit(0)
-            proyect = start_date = end_date = task = None
-            if opt_select is 1 or opt_select is 2: #Proyecto / Tarea
-                proyect = input('Escribe el nombre: ')
-            elif opt_select is 0:
-                date_format = '%Y-%m-%d'
-                start_date = datetime.strptime(input('Fecha inicio (yyyy-mm-dd): '), date_format)
-                end_date = datetime.strptime(input('Fecha fin (yyyy-mm-dd): '), date_format)
-            return self.__find_option(proyect, task, start_date, end_date)
-            
-    
-    def __find_option(self, proyect=None, task=None, start_date=None, end_date=None):
-        file = codecs.open(self.history_file_path, 'r', 'utf8')
-        if proyect is not None:
-            field_to_find = proyect
-        elif task is not None:
-            field_to_find = task
-        else:
-            field_to_find = None
-
-        if start_date is not None and end_date is not None:
-            with open(self.history_file_path, 'r', 'utf8') as file:
-                for line in file:
-                    print(line, 'hola')
-                #start_line = None
-            #for line in file:
-                #if line.find(start_date) >= 0:
-                    #start_line = line
-        
-        # for f in file:
-        #     if field_to_find is not None:
-        #         if f.find(field_to_find) >= 0:
-        #             print(f)
-
 
 
     def get_hour(self):
         return datetime.now().strftime("%H:%M:%S")
+
 
     def get_date(self):
         return datetime.now().strftime('%Y-%m-%d')
@@ -345,11 +319,11 @@ folder_path = 'C:\\Users\\Lluis\\Jornadas'
 history_file_path = 'C:\\Users\\Lluis\\history.txt'
 my_mail = 'example@gmail.com'
 passwd = 'passwd'
-show_options = None
-if len(sys.argv) > 1:
-    show_options = sys.argv[1]
-horario = HorarioV2(folder_path=folder_path, 
-                    history_file_path=history_file_path, 
-                    my_mail=my_mail, 
-                    show_options=show_options)
-horario.working_day()
+if __name__ == '__main__':
+    horario = Horario(folder_path=folder_path,
+                        history_file_path=history_file_path,
+                        my_mail=my_mail)
+    if len(sys.argv) > 1:
+        horario.extra_commands(sys.argv[1])
+    else:
+        horario.working_day()
