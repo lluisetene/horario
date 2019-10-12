@@ -5,9 +5,9 @@ Created on 22 jun. 2019
 '''
 
 # TODO: \
-#   sacar tiempos de cada proyecto \
 #   cifrar contraseña en el fichero de configuración \
 #   enviar por correo copias de las jornadas \
+#   backup cada semana \
 #   limpiar código
 
 import os
@@ -31,7 +31,7 @@ import configparser
 class Horario:
 
     def __init__(self):
-        self.home_path = os.getenv('HOME')
+        self.home_path = Path.home().as_posix()
         self.folder_path = self.home_path + os.sep + 'Jornadas'
         self.history_file_path = self.home_path + os.sep + 'history.txt'
         self.file_name = '{0}.txt'.format(self.get_date())
@@ -114,15 +114,15 @@ class Horario:
             history_file.write(data)
             history_file.close()
 
-        if save_history:
-            self.__send_mail()
+        # if save_history:
+        #     self.__send_mail()
 
     def __save_history(self, folder_path, file_name):
         os.chdir(folder_path)
         file = codecs.open(file_name, 'r', 'utf8')
 
         d_workday = dict()
-        d_proyects = dict()
+        d_projects = dict()
         date_workday = file.readline().split('->')[1]
         start_hour_workday = file.readline().split('->')[1]
         end_hour_workday = None
@@ -136,14 +136,14 @@ class Horario:
                 if len(line) > 1:
                     hours, task = line.split('=>')
                     task = task.strip().lower()
-                    # proyect = re.match('\[([^]]+)\]', task).group()
+                    # project = re.match('\[([^]]+)\]', task).group()
                     start_hour_task, end_hour_task = hours.split('-')
                     if task not in d_workday:
                         d_workday.update({task: [start_hour_task, end_hour_task]})
                     else:
                         d_workday.get(task).extend([start_hour_task, end_hour_task])
-                    # if task.find(proyect) >= 0:
-                    #    d_proyects.update({proyect: [start_hour_task, end_hour_task]})
+                    # if task.find(project) >= 0:
+                    #    d_projects.update({project: [start_hour_task, end_hour_task]})
         file.close()
 
         '''
@@ -161,22 +161,29 @@ class Horario:
             start_hour_workday_fake = start_hour_workday
 
         historical = '\n\n--------------------------------------\n'
-        historical += 'Resumen jornada de hoy, {0}\n\n'.format(date_workday)
-        historical += 'Inicio de jornada > {0}\n'.format(start_hour_workday)
+        historical += 'Resumen jornada de hoy, {0}\n'.format(date_workday)
+        historical += 'Inicio de jornada > {0}'.format(start_hour_workday)
         historical += 'Fin de jornada > {0}\n'.format(end_hour_workday)
         historical += 'Duración de la jornada: {0}\n\n'.format(
             self.__subtract_hours(start_hour_workday_fake, end_hour_workday))
-        historical += 'Intervalos de tiempo para cada tarea:\n'
-        historical += self.task_manager(d_workday)
-        historical += '\n'
-        historical += 'Dedicación a cada proyecto:\n'
-        for proyect in d_proyects:
-            time = self.__operate_hours_list(d_proyects[proyect] if len(d_proyects[proyect]) > 0 else '00:00:00')
-            historical += '{0}>{1}\n'.format(proyect, time)
-        historical += '\nDedicación a cada tarea:\n'
+        # historical += 'Intervalos de tiempo para cada tarea:\n'
+        # historical += self.task_manager(d_workday)
+        # historical += '\n'
+        historical += 'Dedicación a cada tarea:\n'
         for task in d_workday:
             time = self.__operate_hours_list(d_workday[task]) if len(d_workday[task]) > 0 else '00:00:00'
-            historical += '{0}>{1}\n'.format(task, time)
+            historical += '{0} > {1}\n'.format(task, time)
+            project, task = task.split(']')
+            project += ']'
+            if d_projects.get(project) is None:
+                d_projects[project] = [time]
+            else:
+                d_projects[project].append(time)
+        historical += '\nDedicación a cada proyecto:\n'
+        for project in d_projects:
+            time = self.__operate_hours_list(d_projects[project] if len(d_projects[project]) > 0 else '00:00:00',
+                                             only_add=True)
+            historical += '{0} > {1}\n'.format(project, time)
         return historical
 
     def task_manager(self, d_workday):
@@ -185,24 +192,29 @@ class Horario:
             data += '{0}>{1}\n'.format(task, ' '.join(d_workday[task]))
         return data
 
-    def __operate_hours_list(self, hours_list):
+    def __operate_hours_list(self, hours_list, only_add=False):
         """
-        Recibe una lista de horas de una tarea y/o proyecto
+        Recibe una lista de horas de una tarea y/o projecto
 
         :param hours_list: lista con horas
         :returns: tiempo empleado
         """
-        if len(hours_list) == 2:
-            return [self.__subtract_hours(hours_list[i - 1], hours_list[i]) for i in range(1, len(hours_list), 2)][0]
-        else:
-            hours_list = [self.__subtract_hours(hours_list[i - 1], hours_list[i]) for i in range(1, len(hours_list), 2)]
-            while len(hours_list) > 2:
-                hours_list_tmp = [self.__add_hours(hours_list[i - 1], hours_list[i]) for i in
-                                  range(1, len(hours_list), 2)]
-                if len(hours_list_tmp) % 2 != 0:
-                    hours_list_tmp.append(hours_list[len(hours_list) - 1])
-                hours_list = hours_list_tmp
+        if only_add:
+            if len(hours_list) == 1:
+                return hours_list[0]
             return [self.__add_hours(hours_list[i - 1], hours_list[i]) for i in range(1, len(hours_list), 2)][0]
+        else:
+            if len(hours_list) == 2:
+                return [self.__subtract_hours(hours_list[i - 1], hours_list[i]) for i in range(1, len(hours_list), 2)][0]
+            else:
+                hours_list = [self.__subtract_hours(hours_list[i - 1], hours_list[i]) for i in range(1, len(hours_list), 2)]
+                while len(hours_list) > 2:
+                    hours_list_tmp = [self.__add_hours(hours_list[i - 1], hours_list[i]) for i in
+                                      range(1, len(hours_list), 2)]
+                    if len(hours_list_tmp) % 2 != 0:
+                        hours_list_tmp.append(hours_list[len(hours_list) - 1])
+                    hours_list = hours_list_tmp
+                return [self.__add_hours(hours_list[i - 1], hours_list[i]) for i in range(1, len(hours_list), 2)][0]
 
     def __subtract_hours(self, start, end):
         start = start.strip()
@@ -213,7 +225,10 @@ class Horario:
         str_format = "%H:%M:%S"
         h1 = datetime.strptime(start, str_format)
         h2 = datetime.strptime(end, str_format)
-        return str(h2 - h1)
+        total = str(h2 - h1)
+        if len(total.split(':')[0]) == 1:
+            total = '0' + total
+        return total
 
     def __add_hours(self, start, end):
         start = start.split(':')
