@@ -138,10 +138,14 @@ class Horario:
                     task = task.strip().lower()
                     # project = re.match('\[([^]]+)\]', task).group()
                     start_hour_task, end_hour_task = hours.split('-')
-                    if task not in d_workday:
-                        d_workday.update({task: [start_hour_task, end_hour_task]})
+                    if self.validate_hours(start_hour_task, end_hour_task):
+                        if task not in d_workday:
+                            d_workday.update({task: [start_hour_task, end_hour_task]})
+                        else:
+                            d_workday.get(task).extend([start_hour_task, end_hour_task])
                     else:
-                        d_workday.get(task).extend([start_hour_task, end_hour_task])
+                        print('Las horas introducidas son incorrectas. Corrígelas y vuelve a ejecutar el programa. \n{0}'.format(line))
+                        sys.exit(0)
                     # if task.find(project) >= 0:
                     #    d_projects.update({project: [start_hour_task, end_hour_task]})
         file.close()
@@ -164,7 +168,7 @@ class Horario:
         historical += 'Resumen jornada de hoy, {0}\n'.format(date_workday)
         historical += 'Inicio de jornada > {0}'.format(start_hour_workday)
         historical += 'Fin de jornada > {0}\n'.format(end_hour_workday)
-        historical += 'Duración de la jornada: {0}\n\n'.format(
+        historical += 'Duración de la jornada > {0}\n\n'.format(
             self.__subtract_hours(start_hour_workday_fake, end_hour_workday))
         # historical += 'Intervalos de tiempo para cada tarea:\n'
         # historical += self.task_manager(d_workday)
@@ -192,9 +196,22 @@ class Horario:
             data += '{0}>{1}\n'.format(task, ' '.join(d_workday[task]))
         return data
 
+    def validate_hours(self, start_hour_task, end_hour_task):
+        """
+        Recibe la hora de inicio y fin de una tarea y comprueba que inicio < fin
+        :param start_hour_task: hora inicio tarea
+        :param end_hour_task: hora fin tarea
+        :return: inicio < fin (bool)
+        """
+        start_hour, start_min = start_hour_task.split(':')
+        end_hour, end_min = end_hour_task.split(':')
+        if int(start_hour) > int(end_hour) or int(start_hour) == int(end_hour) and int(start_min) > int(end_min):
+            return False
+        return True
+
     def __operate_hours_list(self, hours_list, only_add=False):
         """
-        Recibe una lista de horas de una tarea y/o projecto
+        Recibe una lista de horas de una tarea y/o proyecto
 
         :param hours_list: lista con horas
         :returns: tiempo empleado
