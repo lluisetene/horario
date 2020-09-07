@@ -5,6 +5,7 @@ Created on 22 jun. 2019
 """
 
 # TODO: \
+#   contabilizar horas semanales
 #   cifrar contraseña en el fichero de configuración \
 #   enviar por correo copias de las jornadas \
 #   backup cada semana \
@@ -43,7 +44,7 @@ class Horario:
         if not os.path.exists(self.folder_path):
             self.__mkdir(self.folder_path)
         if not Path(self.config_path).is_file():
-            self.__nano_config(self.config_path)
+            self.__nano_config(is_change_user_values=True)
         if extra_commands is not None:
             self.extra_commands(extra_commands)
         else:
@@ -73,22 +74,42 @@ class Horario:
         else:
             print('New folder: {0}'.format(folder_path))
 
-    def __nano_config(self, config_path):
+    def __nano_config(self, is_change_user_values=False, params=None):
         """
-        Genera fichero configuración con datos del usuario.
-        :param config_path: path donde guardar el fichero de configuración.
+        Fichero con datos del usuario.
+        :param is_change_user_values: si se van a cambiar los datos del usuario.
+        :param params: diccionario con el mismo formato que el indicado abajo (variable d_user)
+                        para insertar datos en el fichero config.
         """
-        username = input('Username: ')
-        email = input('Email: ')
-        password = getpass.getpass('Password: ')
-
         config = configparser.ConfigParser()
-        config.add_section('USER')
-        config.set('USER', 'name', username)
-        config.set('USER', 'email', email)
-        config.set('USER', 'password', password)
 
-        with open(config_path, 'w') as f:
+        d_user = None
+        if is_change_user_values:
+            username = input('Username: ')
+            email = input('Email: ')
+            password = getpass.getpass('Password: ')
+            d_user = {'USER': {
+                'name': username,
+                'email': email,
+                'password': password
+            }
+            }
+
+        d_tmp = dict()
+        if d_user is not None:
+            d_tmp['USER'].update(d_user['USER'])
+        if params is not None:
+            key = list(params.keys())[0]
+            d_tmp[key].update(params[key])
+        for section, d in d_tmp.items():
+            if config[section] is None:
+                config.add_section(section)
+                for k, v in d.items():
+                    config.set(section, k, v)
+            else:
+                config[section] = d
+
+        with open(self.config_path, 'w') as f:
             config.write(f)
 
     def __write_file(self, home_user_path, folder_path, file_name, history_file_path):
@@ -148,13 +169,12 @@ class Horario:
             start_hour_workday_fake = time_break[0]
         else:
             start_hour_workday_fake = start_hour_workday
-
+        workday_timeout = self.__subtract_hours(start_hour_workday_fake, end_hour_workday)
         historical = '\n\n--------------------------------------\n'
         historical += 'Resumen jornada de hoy, {0}\n'.format(date_workday)
         historical += 'Inicio de jornada > {0}\n'.format(start_hour_workday)
         historical += 'Fin de jornada > {0}\n'.format(end_hour_workday)
-        historical += 'Duración de la jornada > {0}\n\n'.format(
-            self.__subtract_hours(start_hour_workday_fake, end_hour_workday))
+        historical += 'Duración de la jornada > {0}\n\n'.format(workday_timeout)
         historical += 'Dedicación a cada tarea:\n'
         for project, tasks in d_workday.items():
             for task in tasks:
@@ -168,6 +188,8 @@ class Horario:
                 time_l.extend(tasks[task])
             self.add_hours_of_list(time_l)
             historical += '{0} > {1}\n'.format(project, time_l[0])
+
+        self.__nano_config(params={'HORAS': {'semana actual': workday_timeout}})
         return historical
 
     def add_hours_of_list(self, lista):
@@ -211,7 +233,9 @@ class Horario:
                             else:
                                 d_workday[project][task_project].append(time)
                     else:
-                        print('Las horas introducidas son incorrectas. Corrígelas y vuelve a ejecutar el programa. \n{0}'.format(line))
+                        print(
+                            'Las horas introducidas son incorrectas. Corrígelas y vuelve a ejecutar el programa. \n{0}'.format(
+                                line))
                         sys.exit()
         file.close()
         return date_workday, start_hour_workday, end_hour_workday, d_workday
