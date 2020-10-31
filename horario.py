@@ -9,7 +9,6 @@ Created on 22 jun. 2019
 #   enviar por correo copias de las jornadas \
 #   backup cada semana \
 #   limpiar código \
-#	generar backups al finalizar el mes
 
 import os
 import sys
