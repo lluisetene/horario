@@ -5,11 +5,11 @@ Created on 22 jun. 2019
 """
 
 # TODO: \
-#   contabilizar horas semanales
 #   cifrar contraseña en el fichero de configuración \
 #   enviar por correo copias de las jornadas \
 #   backup cada semana \
-#   limpiar código
+#   limpiar código \
+#	generar backups al finalizar el mes
 
 import os
 import sys
@@ -19,38 +19,46 @@ from datetime import datetime
 import getpass
 import re
 import configparser
+import calendar
+from shutil import move
+from zipfile import ZipFile
 
 
 class Horario:
 
     def __init__(self):
         self.home_user_path = Path.home().as_posix()
-        self.folder_path = self.home_user_path + os.sep + 'Jornadas'
-        self.history_file_path = self.home_user_path + os.sep + 'history.txt'
-        self.file_name = '{0}.txt'.format(self.get_date())
-        self.config_path = self.folder_path + os.sep + 'config.ini'
-        self.d_commands_str = {'-c': 'cambia los datos del usuario almacenados en el fichero de configuración.',
+        self.folder_path = os.path.join(self.home_user_path, 'Jornadas')
+        self.history_file_path = os.path.join(self.home_user_path, 'history.txt')
+        self.file_name = '{0}.txt'.format(self.get_date_str())
+        self.config_path = os.path.join(self.folder_path, 'config.ini')
+        self.d_commands_str = {'\n\t\t-c': 'cambia los datos del usuario almacenados en el fichero de configuración.',
                                '-h': 'imprime este mensaje de ayuda.',
-                               '-r': 'refactoriza todo el contenido del fichero "history" con el formato de la \n'
-                                     '\t\t\tversión actual.',
+                               #'-r': 'refactoriza todo el contenido del fichero "history" con el formato de la \n'
+                               #      '\t\t\tversión actual.',
                                '-f': 'recalcula las horas del fichero indicado como segundo argumento:\n'
-                                     '\t\t\t-f <jornada>.txt (la extensión no es obligatoria).'}
+                                     '\t\t\t-f <jornada>.txt (la extensión no es obligatoria).',
+                               '-b': 'hace backup del mes pasado como segundo argumento o -1 para todos los meses'}
 
     def working_day(self, extra_commands=None):
         """
         Primera función a ejecutar. Inicializa la ejecución del programa.
         :type extra_commands: el usuario quiere realizar una acción específica.
         """
-        if not os.path.exists(self.folder_path):
+        if not os.path.exists(self.folder_path):  # No existe directorio 'Jornadas'
             self.__mkdir(self.folder_path)
-        if not Path(self.config_path).is_file():
-            self.__nano_config(is_change_user_values=True)
-        if extra_commands is not None:
+        if not Path(self.config_path).is_file():  # No existe fichero 'config'
+            self.__nano_config(self.config_path)
+        if extra_commands is not None:  # Se ha especificado un comando
             self.extra_commands(extra_commands)
-        else:
+        else:  # Genera fichero para el día que se ejecuta
             self.__write_file(self.home_user_path, self.folder_path, self.file_name, self.history_file_path)
-
+        
     def extra_commands(self, argvs):
+        """
+        Redirige a la función que corresponde según el parámetro indicado por el usuario.
+        :type argvs: comando extra añadido al ejecutar el script.
+        """
         command = argvs[1]
         if command == '-c':  # cambiar correo y contraseña (cifrada)
             self.__c_command(self.config_path)
@@ -63,10 +71,22 @@ class Horario:
             if workday_file.find('.txt') == -1:  # no tiene extensión
                 workday_file += '.txt'
             self.__f_command(self.home_user_path, self.folder_path, workday_file, self.history_file_path)
+        elif command == '-b':  # backup
+            backup_month = None
+            if len(argvs) == 3:  # ha pasado parámetro
+                try:
+                    backup_month = int(argvs[2])
+                except:
+                    pass
+            return self.__b_command(backup_month)
         else:
             print('Command not found. For more info "horario.py -h"')
 
     def __mkdir(self, folder_path):
+        """
+        Crea directorio 'Jornadas' en el directorio principal del usuario (si no existe).
+        :param folder_path: directorio donde generar directorio 'Jornadas'.
+        """
         try:
             os.mkdir(folder_path)
         except Exception:
@@ -74,42 +94,22 @@ class Horario:
         else:
             print('New folder: {0}'.format(folder_path))
 
-    def __nano_config(self, is_change_user_values=False, params=None):
+    def __nano_config(self, config_path):
         """
-        Fichero con datos del usuario.
-        :param is_change_user_values: si se van a cambiar los datos del usuario.
-        :param params: diccionario con el mismo formato que el indicado abajo (variable d_user)
-                        para insertar datos en el fichero config.
+        Genera fichero configuración con datos del usuario.
+        :param config_path: path donde guardar el fichero de configuración.
         """
+        username = input('Username: ')
+        email = input('Email: ')
+        password = getpass.getpass('Password: ')
+
         config = configparser.ConfigParser()
+        config.add_section('USER')
+        config.set('USER', 'name', username)
+        config.set('USER', 'email', email)
+        config.set('USER', 'password', password)
 
-        d_user = None
-        if is_change_user_values:
-            username = input('Username: ')
-            email = input('Email: ')
-            password = getpass.getpass('Password: ')
-            d_user = {'USER': {
-                'name': username,
-                'email': email,
-                'password': password
-            }
-            }
-
-        d_tmp = dict()
-        if d_user is not None:
-            d_tmp['USER'].update(d_user['USER'])
-        if params is not None:
-            key = list(params.keys())[0]
-            d_tmp[key].update(params[key])
-        for section, d in d_tmp.items():
-            if config[section] is None:
-                config.add_section(section)
-                for k, v in d.items():
-                    config.set(section, k, v)
-            else:
-                config[section] = d
-
-        with open(self.config_path, 'w') as f:
+        with open(config_path, 'w') as f:
             config.write(f)
 
     def __write_file(self, home_user_path, folder_path, file_name, history_file_path):
@@ -122,18 +122,22 @@ class Horario:
 
         if not Path(workday_file_path).is_file():  # nueva jornada
             workday_file = codecs.open(workday_file_path, 'w', 'utf8')
-            data = 'Fecha de la jornada actual -> {0}\nHora de inicio -> {1}\n\n'.format(self.get_date(),
-                                                                                         self.get_hour())
+            data = 'Fecha de la jornada actual -> {0}\nHora de inicio -> {1}\n\n'.format(self.get_date_str(),
+                                                                                         self.get_time_str())
         else:  # fin jornada
             save_history = True
             workday_file = codecs.open(workday_file_path, 'a', 'utf8')
-            data = '\nFin de jornada -> {0}'.format(self.get_hour())
+            data = '\nFin de jornada -> {0}'.format(self.get_time_str())
         workday_file.write(data)
         workday_file.close()
 
         if save_history:
             self.summary_workday(home_user_path, folder_path, workday_file_path, history_file_path)
         #     self.__send_mail()
+        
+        if self.check_last_day_of_month():
+            self.__generate_backup(datetime.now().month)
+
 
     def summary_workday(self, home_user_path, folder_path, workday_file, history_file_path):
         """
@@ -169,12 +173,13 @@ class Horario:
             start_hour_workday_fake = time_break[0]
         else:
             start_hour_workday_fake = start_hour_workday
-        workday_timeout = self.__subtract_hours(start_hour_workday_fake, end_hour_workday)
+
         historical = '\n\n--------------------------------------\n'
         historical += 'Resumen jornada de hoy, {0}\n'.format(date_workday)
         historical += 'Inicio de jornada > {0}\n'.format(start_hour_workday)
         historical += 'Fin de jornada > {0}\n'.format(end_hour_workday)
-        historical += 'Duración de la jornada > {0}\n\n'.format(workday_timeout)
+        historical += 'Duración de la jornada > {0}\n\n'.format(
+            self.__subtract_hours(start_hour_workday_fake, end_hour_workday))
         historical += 'Dedicación a cada tarea:\n'
         for project, tasks in d_workday.items():
             for task in tasks:
@@ -188,8 +193,6 @@ class Horario:
                 time_l.extend(tasks[task])
             self.add_hours_of_list(time_l)
             historical += '{0} > {1}\n'.format(project, time_l[0])
-
-        self.__nano_config(params={'HORAS': {'semana actual': workday_timeout}})
         return historical
 
     def add_hours_of_list(self, lista):
@@ -233,9 +236,7 @@ class Horario:
                             else:
                                 d_workday[project][task_project].append(time)
                     else:
-                        print(
-                            'Las horas introducidas son incorrectas. Corrígelas y vuelve a ejecutar el programa. \n{0}'.format(
-                                line))
+                        print('Las horas introducidas son incorrectas. Corrígelas y vuelve a ejecutar el programa. \n{0}'.format(line))
                         sys.exit()
         file.close()
         return date_workday, start_hour_workday, end_hour_workday, d_workday
@@ -282,13 +283,71 @@ class Horario:
         #  self.__files_compress()
         pass
 
+    def check_last_day_of_month(self):
+        """
+        Comprueba si es último día laboral del mes.
+        """
+        # Obtengo las 2 últimas jornadas y comparo los meses: son distintos -> genero Backup del mes anterior
+        l_last_workdays = []
+        for f in reversed(os.listdir(self.folder_path)):
+            if f.split('.')[1] == 'txt':
+                l_last_workdays.append(f)
+            if len(l_last_workdays) == 2:
+                break
+
+        first_month_field = int(l_last_workdays[0].split('-')[1])
+        second_month_field = int(l_last_workdays[1].split('-')[1])
+        return first_month_field != second_month_field
+
+    def __generate_backup(self, backup_month, is_cur_date=True):
+        """TODO: entrar en 'history.txt', copiar sección mes actual, generar otro 'history.txt' dentro
+                del backup de las jornadas"""
+        backups_dir = self.folder_path + '/Backups'
+        if not os.path.isdir(backups_dir):
+            os.mkdir(backups_dir)
+        cur_date = datetime.now()
+        if (cur_date.day != calendar.monthrange(cur_date.year, backup_month) and is_cur_date) or not is_cur_date:
+            try:
+                #os.mkdir(os.path.join(self.folder_path, bckup_name))
+                if backup_month <= 9:
+                    data_str = '{0}-0{1}'.format(cur_date.year, backup_month)
+                else:
+                    data_str = '{0}-{1}'.format(cur_date.year, backup_month)
+                zip_name = 'Backup ' + data_str + '.zip'
+                os.chdir(self.folder_path)
+                zipObj = ZipFile(zip_name, 'w')
+                #bckup_name = 'Backup {0}-{1}'.format(cur_date.year, backup_month)
+                zipf = None
+                #bckup_path = self.folder_path + bckup_name
+                content = os.listdir(self.folder_path)
+                count_files = 0
+                for file in content:
+                    try:    
+                        f = file.split('.')[0].split('-')
+                        f_year, f_month, f_day = int(f[0]), int(f[1]), int(f[2])
+                        if f_month == backup_month and f_year == cur_date.year:
+                            zipObj.write(os.path.basename(file))
+                            count_files += 1
+                    except:
+                        pass
+                zipObj.close()
+                if count_files == 0:  # No hay ficheros para esa fecha, borramos zip
+                    os.remove(zip_name)
+                    print('No hay ficheros para la fecha ', data_str)
+                else:
+                    move(zip_name, backups_dir)
+                    print('Copia realizada correctamente para fecha ', data_str)
+            except:
+                print('Ha ocurrido un error y no se ha podido hacer el back up.')
+
+
     def __files_compress(self):
         pass
 
-    def get_hour(self):
+    def get_time_str(self):
         return datetime.now().strftime("%H:%M:%S")
 
-    def get_date(self):
+    def get_date_str(self):
         return datetime.now().strftime('%Y-%m-%d')
 
     def __h_command(self, d_commands_str):
@@ -340,6 +399,25 @@ class Horario:
             print('Ops, no ha podido actualizarse correctamente.')
         else:
             print('Fichero history.py actualizado!')
+
+    def __b_command(self, backup_month=None):
+        if backup_month is not None and isinstance(backup_month, int):
+            if backup_month == -1:
+                for i in range(1, 13):
+                    self.__generate_backup(i, is_cur_date=False)
+                return
+            elif backup_month >= 1 and backup_month <= 12:
+                return self.__generate_backup(backup_month, is_cur_date=False)
+            else:
+                print('Mes incorrecto')
+        else:
+            print('Dato incorrecto')
+        try:
+            backup_month = int(input('Introduce (en número) el mes para hacer backup (-1 para todos los meses): '))
+        except:
+            backup_month = None
+        return self.__b_command(backup_month)    
+            
 
 
 if __name__ == '__main__':
