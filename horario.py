@@ -9,6 +9,7 @@ Created on 22 jun. 2019
 #   enviar por correo copias de las jornadas \
 #   backup cada semana \
 #   limpiar código \
+#	generar backups al finalizar el mes
 
 import os
 import sys
@@ -334,8 +335,13 @@ class Horario:
                     os.remove(zip_name)
                     print('No hay ficheros para la fecha ', data_str)
                 else:
-                    move(zip_name, backups_dir)
-                    print('Copia realizada correctamente para fecha ', data_str)
+                    try:
+                        move(zip_name, backups_dir)
+                        print('Copia realizada correctamente para fecha ', data_str)
+                    except:
+                        os.remove(backups_dir + os.sep + zip_name)
+                        move(zip_name, backups_dir)
+                        print('Copia realizada correctamente para fecha ', data_str)
             except:
                 print('Ha ocurrido un error y no se ha podido hacer el back up.')
 
