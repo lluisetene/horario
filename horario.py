@@ -135,7 +135,7 @@ class Horario:
         #     self.__send_mail()
         
         if self.check_last_day_of_month():
-            self.__generate_backup(datetime.now().month)
+            self.__generate_backup(datetime.now().month - 1)
 
 
     def summary_workday(self, home_user_path, folder_path, workday_file, history_file_path):
